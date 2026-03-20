@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PostmanWeb v4</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ═══ TOPBAR ═══════════════════════════════════════════════ -->
+<div id="topbar">
+  <div class="logo">
+    <svg viewBox="0 0 24 24" fill="none" width="22" height="22">
+      <circle cx="12" cy="12" r="10" fill="var(--accent)" opacity=".18"/>
+      <circle cx="12" cy="12" r="5"  fill="var(--accent)" opacity=".35"/>
+      <path d="M12 7v5l3 3" stroke="var(--accent)" stroke-width="1.8" stroke-linecap="round"/>
+    </svg>
+    PostmanWeb
+  </div>
+
+  <div class="ws-bar">
+    <select id="ws-sel" onchange="switchWorkspace(this.value)" title="Switch Workspace"></select>
+    <button class="btn-topbar" onclick="openNewWorkspace()" title="New Workspace">＋</button>
+  </div>
+
+  <div id="tabs"></div>
+  <button id="btn-new-tab" onclick="newTab()" title="New Tab (Ctrl+T)">＋</button>
+
+  <div class="topbar-right">
+    <button id="cors-btn" onclick="toggleCORS()" title="Toggle CORS Proxy">⚡ CORS: OFF</button>
+    <select id="env-quick" class="env-quick-sel" onchange="quickEnvSwitch(this.value)" title="Active Environment">
+      <option value="">No Environment</option>
+    </select>
+    <button class="btn-topbar" onclick="openGRPC()"       title="gRPC Client">gRPC</button>
+    <button class="btn-topbar" onclick="openWS()"         title="WebSocket">🔌 WS</button>
+    <button class="btn-topbar" onclick="openMockServer()" title="Mock Server">🎭 Mock</button>
+    <button class="btn-topbar" onclick="openImport()"     title="Import">📥</button>
+    <button class="btn-topbar" onclick="toggleTheme()"    title="Toggle Theme" id="theme-btn">🌙</button>
+    <button class="btn-topbar" onclick="openSettings()"   title="Settings">⚙</button>
+  </div>
+</div>
+
+<!-- ═══ MAIN ════════════════════════════════════════════════ -->
+<div id="main">
+
+  <!-- ─── SIDEBAR ──────────────────────────────────────── -->
+  <div id="sidebar">
+    <div class="sb-tabs">
+      <div class="sb-tab active" data-sb="colls"   onclick="switchSB('colls')">COLLS</div>
+      <div class="sb-tab"        data-sb="history" onclick="switchSB('history')">HISTORY</div>
+      <div class="sb-tab"        data-sb="envs"    onclick="switchSB('envs')">ENVS</div>
+    </div>
+
+    <!-- COLLECTIONS -->
+    <div class="sb-panel active" id="sbp-colls">
+      <div class="sb-search">
+        <input id="coll-search" type="text" placeholder="Search collections…" oninput="renderCollections()">
+      </div>
+      <div class="sb-actions">
+        <button class="btn-s accent" onclick="openNewColl()">+ New</button>
+        <button class="btn-s"        onclick="openImport()">Import</button>
+        <button class="btn-s"        onclick="exportAllColls()">Export All</button>
+      </div>
+      <div class="sb-list" id="coll-list"></div>
+    </div>
+
+    <!-- HISTORY -->
+    <div class="sb-panel" id="sbp-history">
+      <div class="hist-header">
+        <div class="hist-rec-row">
+          <div class="hist-label">
+            <span class="hrec-dot" id="hist-dot"></span>
+            RECORD HISTORY
+          </div>
+          <label class="toggle">
+            <input type="checkbox" id="hist-toggle" onchange="toggleHistRec()" checked>
+            <span class="t-slider"></span>
+          </label>
+        </div>
+        <div class="sb-actions" style="margin-top:4px">
+          <button class="btn-s danger" onclick="clearHistory()">🗑 Clear All</button>
+          <button class="btn-s"        onclick="unpinAllHistory()">📌 Unpin All</button>
+        </div>
+      </div>
+      <!-- All events delegated via initHistoryEvents() in app.js -->
+      <div class="sb-list" id="hist-list"></div>
+    </div>
+
+    <!-- ENVIRONMENTS -->
+    <div class="sb-panel" id="sbp-envs">
+      <div class="sb-actions">
+        <button class="btn-s accent" onclick="openNewEnv()">+ New Env</button>
+        <button class="btn-s"        onclick="openGlobals()">🌐 Globals</button>
+      </div>
+      <div class="sb-list" id="env-list"></div>
+    </div>
+  </div>
+
+  <!-- ─── WORKSPACE ─────────────────────────────────────── -->
+  <div id="workspace">
+
+    <!-- URL BAR -->
+    <div id="urlbar">
+      <button class="btn-icon-url" onclick="toggleSB()" title="Toggle Sidebar (Ctrl+\)">☰</button>
+
+      <select id="method-sel" onchange="colorMethod()">
+        <option value="GET">GET</option>
+        <option value="POST">POST</option>
+        <option value="PUT">PUT</option>
+        <option value="PATCH">PATCH</option>
+        <option value="DELETE">DELETE</option>
+        <option value="HEAD">HEAD</option>
+        <option value="OPTIONS">OPTIONS</option>
+      </select>
+
+      <div class="url-wrap">
+        <input id="url-in" type="text"
+          placeholder="https://api.example.com  •  http://10.x.x.x:port  •  {{variable}}  •  :pathVar"
+          autocomplete="off" spellcheck="false">
+        <span id="direct-badge" class="direct-badge"
+              title="Private/internal IP — sent DIRECTLY (no proxy)">DIRECT</span>
+      </div>
+
+      <button id="save-btn"   onclick="saveToCollection()" title="Save (Ctrl+S)">💾 Save</button>
+      <button id="cancel-btn" onclick="cancelReq()"        style="display:none" title="Cancel (Esc)">✕ Cancel</button>
+      <button id="send-btn"   onclick="sendRequest()"      title="Send (Ctrl+Enter)">Send ➤</button>
+    </div>
+
+    <!-- SPLIT PANE -->
+    <div id="split">
+
+      <!-- REQUEST AREA -->
+      <div id="req-area">
+        <div class="ptabs" id="req-ptabs">
+          <div class="ptab active" data-panel="params"    onclick="switchReqPanel('params')">Params</div>
+          <div class="ptab"        data-panel="pathvars"  onclick="switchReqPanel('pathvars')">Path Variables</div>
+          <div class="ptab"        data-panel="headers"   onclick="switchReqPanel('headers')">Headers</div>
+          <div class="ptab"        data-panel="body"      onclick="switchReqPanel('body')">Body</div>
+          <div class="ptab"        data-panel="auth"      onclick="switchReqPanel('auth')">Auth</div>
+          <div class="ptab"        data-panel="pre"       onclick="switchReqPanel('pre')">Pre-req Script</div>
+          <div class="ptab"        data-panel="tests"     onclick="switchReqPanel('tests')">Tests</div>
+          <div class="ptab"        data-panel="rsettings" onclick="switchReqPanel('rsettings')">Settings</div>
+          <div class="ptab codegen-tab"                   onclick="openCodegen()">{ } Code</div>
+        </div>
+
+        <div class="pcontent" id="req-pcontent">
+
+          <!-- PARAMS -->
+          <div class="tpanel active" id="rp-params">
+            <table class="kv-tbl">
+              <thead><tr><th class="col-chk"></th><th>Key</th><th>Value</th><th>Description</th><th class="col-del"></th></tr></thead>
+              <tbody id="kv-params"></tbody>
+            </table>
+            <button class="add-row-btn" onclick="addKVRow('params')">+ Add Parameter</button>
+          </div>
+
+          <!-- PATH VARIABLES -->
+          <div class="tpanel" id="rp-pathvars">
+            <div class="pv-hint">Auto-extracted from <code>/:param</code> or <code>/{param}</code>. Supports <code>{{variable}}</code>.</div>
+            <table class="kv-tbl">
+              <thead><tr><th>Variable</th><th>Value</th><th>Description</th><th class="col-del"></th></tr></thead>
+              <tbody id="kv-pathvars"></tbody>
+            </table>
+            <div id="pv-empty" class="pv-empty">No path variables detected.</div>
+          </div>
+
+          <!-- HEADERS -->
+          <div class="tpanel" id="rp-headers">
+            <table class="kv-tbl">
+              <thead><tr><th class="col-chk"></th><th>Key</th><th>Value</th><th>Description</th><th class="col-del"></th></tr></thead>
+              <tbody id="kv-headers"></tbody>
+            </table>
+            <button class="add-row-btn" onclick="addKVRow('headers')">+ Add Header</button>
+          </div>
+
+          <!-- BODY -->
+          <div class="tpanel" id="rp-body">
+            <div class="btype-row">
+              <button class="btype-btn active" data-type="none"    onclick="setBody('none')">none</button>
+              <button class="btype-btn"        data-type="form"    onclick="setBody('form')">form-data</button>
+              <button class="btype-btn"        data-type="urlenc"  onclick="setBody('urlenc')">x-www-form-urlencoded</button>
+              <button class="btype-btn"        data-type="raw"     onclick="setBody('raw')">raw</button>
+              <button class="btype-btn"        data-type="binary"  onclick="setBody('binary')">binary</button>
+              <button class="btype-btn"        data-type="graphql" onclick="setBody('graphql')">GraphQL</button>
+            </div>
+            <div id="body-none" class="body-sub"><p class="muted-msg">No body will be sent with this request.</p></div>
+            <div id="body-form" class="body-sub" style="display:none">
+              <table class="kv-tbl">
+                <thead><tr><th class="col-chk"></th><th>Key</th><th>Value / File</th><th class="col-type">Type</th><th class="col-del"></th></tr></thead>
+                <tbody id="kv-form"></tbody>
+              </table>
+              <button class="add-row-btn" onclick="addFormRow()">+ Add Field</button>
+            </div>
+            <div id="body-urlenc" class="body-sub" style="display:none">
+              <table class="kv-tbl">
+                <thead><tr><th class="col-chk"></th><th>Key</th><th>Value</th><th>Description</th><th class="col-del"></th></tr></thead>
+                <tbody id="kv-urlenc"></tbody>
+              </table>
+              <button class="add-row-btn" onclick="addKVRow('urlenc')">+ Add Field</button>
+            </div>
+            <div id="body-raw" class="body-sub" style="display:none">
+              <div class="raw-toolbar">
+                <select id="raw-fmt" onchange="onRawFmtChange()">
+                  <option value="json">JSON</option>
+                  <option value="xml">XML</option>
+                  <option value="html">HTML</option>
+                  <option value="text">Text</option>
+                  <option value="javascript">JavaScript</option>
+                </select>
+                <button class="btn-s" onclick="beautifyRaw()">✨ Beautify</button>
+              </div>
+              <textarea class="code-area" id="code-raw" rows="10" placeholder='{"key": "value"}' spellcheck="false"></textarea>
+            </div>
+            <div id="body-binary" class="body-sub" style="display:none">
+              <div class="binary-drop" id="bin-drop"
+                   onclick="document.getElementById('bin-file').click()"
+                   ondragover="event.preventDefault();this.classList.add('dov')"
+                   ondragleave="this.classList.remove('dov')"
+                   ondrop="handleBinDrop(event)">
+                <input type="file" id="bin-file" style="display:none" onchange="showBinFile(this)">
+                <div id="bin-label">📁 Click to choose file or drag &amp; drop</div>
+              </div>
+            </div>
+            <div id="body-graphql" class="body-sub" style="display:none">
+              <div class="gql-wrap">
+                <div>
+                  <div class="field-label">QUERY</div>
+                  <textarea class="code-area" id="gql-q" rows="7" spellcheck="false" placeholder="query {\n  users { id name email }\n}"></textarea>
+                </div>
+                <div>
+                  <div class="field-label">VARIABLES (JSON)</div>
+                  <textarea class="code-area" id="gql-v" rows="4" spellcheck="false" placeholder='{"userId": 1}'></textarea>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- AUTH -->
+          <div class="tpanel" id="rp-auth">
+            <div class="auth-type-row">
+              <div class="field-label">AUTH TYPE</div>
+              <select id="auth-sel" class="auth-type-sel" onchange="renderAuthFields()">
+                <option value="none">No Auth</option>
+                <option value="bearer">Bearer Token</option>
+                <option value="apikey">API Key</option>
+                <option value="basic">Basic Auth</option>
+                <option value="digest">Digest Auth</option>
+                <option value="oauth1">OAuth 1.0</option>
+                <option value="oauth2">OAuth 2.0</option>
+                <option value="hawk">Hawk Auth</option>
+                <option value="aws">AWS Signature V4</option>
+                <option value="ntlm">NTLM</option>
+              </select>
+            </div>
+            <div id="auth-fields"></div>
+          </div>
+
+          <!-- PRE-REQUEST SCRIPT -->
+          <div class="tpanel" id="rp-pre">
+            <textarea class="script-area" id="pre-script" rows="10" spellcheck="false"
+              placeholder="// Pre-request Script&#10;pm.environment.set('token', 'abc123');&#10;pm.globals.set('apiKey', 'xyz');&#10;console.log('URL:', pm.request.url.toString());"></textarea>
+            <div class="script-refs">
+              <b>pm.environment</b>.get/set/unset/has/clear() &nbsp;|&nbsp;
+              <b>pm.globals</b>.get/set/unset/has() &nbsp;|&nbsp;
+              <b>pm.collectionVariables</b>.get/set/unset() &nbsp;|&nbsp;
+              <b>pm.variables</b>.get/set() &nbsp;|&nbsp;
+              <b>pm.request</b>.url/.method/.headers/.body &nbsp;|&nbsp;
+              <b>pm.sendRequest</b>(opts, cb) &nbsp;|&nbsp;
+              <b>console</b>.log/warn/error/info()
+            </div>
+          </div>
+
+          <!-- TEST SCRIPT -->
+          <div class="tpanel" id="rp-tests">
+            <textarea class="script-area" id="test-script" rows="10" spellcheck="false"
+              placeholder="// Test Script&#10;pm.test('Status is 200', () =&gt; pm.response.to.have.status(200));&#10;pm.test('Fast', () =&gt; pm.expect(pm.response.responseTime).to.be.below(1000));&#10;pm.test('Has data', () =&gt; pm.expect(pm.response.json()).to.have.property('data'));"></textarea>
+            <div class="script-refs">
+              <b>pm.test</b>(name, fn) &nbsp;|&nbsp;
+              <b>pm.expect</b>(val).to.equal/.include/.be.below/.have.property/.matchSchema() &nbsp;|&nbsp;
+              <b>pm.response</b>.json()/.text()/.code/.responseTime &nbsp;|&nbsp;
+              <b>pm.response.to.have</b>.status(200)/.header(k) &nbsp;|&nbsp;
+              <b>pm.response.to.be</b>.ok/.json/.success/.error
+            </div>
+          </div>
+
+          <!-- REQUEST SETTINGS -->
+          <div class="tpanel" id="rp-rsettings">
+            <div class="rsettings-grid">
+              <div class="s-row">
+                <div><div class="s-label">Follow Redirects</div><div class="s-desc">Automatically follow HTTP 3xx redirects</div></div>
+                <label class="toggle"><input type="checkbox" id="opt-redirect" checked><span class="t-slider"></span></label>
+              </div>
+              <div class="s-row">
+                <div><div class="s-label">Disable Body</div><div class="s-desc">Send request without body even if configured</div></div>
+                <label class="toggle"><input type="checkbox" id="opt-nobody"><span class="t-slider"></span></label>
+              </div>
+              <div class="s-row">
+                <div><div class="s-label">Use Mock Response</div><div class="s-desc">Return mock if a matching rule exists</div></div>
+                <label class="toggle"><input type="checkbox" id="opt-mock"><span class="t-slider"></span></label>
+              </div>
+              <div style="margin-top:10px">
+                <div class="field-label">REQUEST TIMEOUT (ms)</div>
+                <input type="number" id="opt-timeout" value="30000" style="width:160px">
+              </div>
+            </div>
+          </div>
+
+        </div><!-- /pcontent -->
+      </div><!-- /req-area -->
+
+      <div id="resizer"></div>
+
+      <!-- RESPONSE AREA -->
+      <div id="resp-area">
+
+        <!-- Status bar with ENLARGE button -->
+        <div id="resp-status">
+          <span id="r-pill"  class="spill" style="display:none"></span>
+          <span id="r-time"  class="stat"  style="display:none"></span>
+          <span id="r-size"  class="stat"  style="display:none"></span>
+          <span id="r-hint">Hit Send to get a response</span>
+          <div id="r-acts" class="resp-acts" style="display:none">
+            <button class="btn-s" onclick="copyResponse()"   title="Copy response body">📋 Copy</button>
+            <button class="btn-s" onclick="saveRespFile()"   title="Save to file">💾 Save</button>
+            <!-- ENLARGE: opens full-screen body overlay -->
+            <button class="btn-s" onclick="openEnlargeResp()" title="Enlarge response (full screen)">⛶ Enlarge</button>
+          </div>
+        </div>
+
+        <!-- Response panel tabs -->
+        <div class="ptabs" id="resp-ptabs">
+          <div class="rptab ptab active" data-panel="rbody"    onclick="switchRespPanel('rbody')">Body</div>
+          <div class="rptab ptab"        data-panel="rhdrs"    onclick="switchRespPanel('rhdrs')">Headers</div>
+          <div class="rptab ptab"        data-panel="rcookies" onclick="switchRespPanel('rcookies')">Cookies</div>
+          <div class="rptab ptab"        data-panel="rtests"   onclick="switchRespPanel('rtests')">
+            Test Results <span class="pbadge" id="test-badge" style="display:none">0</span>
+          </div>
+          <div class="rptab ptab"        data-panel="rconsole" onclick="switchRespPanel('rconsole')">Console</div>
+        </div>
+
+        <!-- BODY panel -->
+        <div class="rtpanel active" id="rsp-rbody">
+          <!-- Body view sub-tabs + per-panel enlarge -->
+          <div class="body-toolbar">
+            <div class="ptabs body-view-tabs" style="border-bottom:none;padding:0;background:transparent">
+              <div class="rbview ptab active" data-view="pretty"  onclick="switchRespBody('pretty')">Pretty</div>
+              <div class="rbview ptab"        data-view="raw"     onclick="switchRespBody('raw')">Raw</div>
+              <div class="rbview ptab"        data-view="preview" onclick="switchRespBody('preview')">Preview</div>
+            </div>
+            <button class="btn-enlarge-panel" onclick="openEnlargeResp()" title="Full screen">⛶</button>
+          </div>
+          <div class="resp-body-wrap">
+            <div id="rbp-pretty"  class="rbpanel active"><pre id="resp-pretty"></pre></div>
+            <div id="rbp-raw"     class="rbpanel"><pre id="resp-raw"></pre></div>
+            <!-- Preview iframe — sandbox allows scripts for proper HTML rendering -->
+            <div id="rbp-preview" class="rbpanel">
+              <iframe id="resp-preview"
+                      sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
+                      referrerpolicy="no-referrer"></iframe>
+            </div>
+          </div>
+        </div>
+
+        <!-- HEADERS panel -->
+        <div class="rtpanel" id="rsp-rhdrs">
+          <div class="panel-toolbar">
+            <button class="btn-enlarge-panel" onclick="openEnlargePanel('headers')" title="Full screen">⛶</button>
+          </div>
+          <div class="pcontent"><table class="rh-tbl" id="r-headers-tbl"></table></div>
+        </div>
+
+        <!-- COOKIES panel -->
+        <div class="rtpanel" id="rsp-rcookies">
+          <div class="panel-toolbar">
+            <button class="btn-enlarge-panel" onclick="openEnlargePanel('cookies')" title="Full screen">⛶</button>
+          </div>
+          <div class="pcontent" id="cookies-out"></div>
+        </div>
+
+        <!-- TEST RESULTS panel -->
+        <div class="rtpanel" id="rsp-rtests">
+          <div class="panel-toolbar">
+            <button class="btn-enlarge-panel" onclick="openEnlargePanel('tests')" title="Full screen">⛶</button>
+          </div>
+          <div class="pcontent" id="test-output">
+            <div class="empty-state"><div class="ei">🧪</div><p>Write tests in the Tests tab, then send a request.</p></div>
+          </div>
+        </div>
+
+        <!-- CONSOLE panel -->
+        <div class="rtpanel" id="rsp-rconsole">
+          <div class="console-toolbar">
+            <button class="btn-s" onclick="clearConsole()">🗑 Clear</button>
+            <button class="btn-enlarge-panel" onclick="openEnlargePanel('console')" title="Full screen" style="margin-left:auto">⛶</button>
+          </div>
+          <div id="console-out"></div>
+        </div>
+
+      </div><!-- /resp-area -->
+    </div><!-- /split -->
+  </div><!-- /workspace -->
+</div><!-- /main -->
+
+<!-- ═══ FULLSCREEN OVERLAY (Enlarge Body / Panel) ══════════ -->
+<!-- Used by openEnlargeResp() and openEnlargePanel() in app.js -->
+<div id="fs-overlay" class="fs-overlay" style="display:none">
+  <div class="fs-header">
+    <div class="fs-title" id="fs-title">Response Body</div>
+    <div class="fs-toolbar" id="fs-toolbar">
+      <!-- sub-tabs injected here for body view -->
+    </div>
+    <div class="fs-acts">
+      <button class="btn-s" id="fs-copy-btn"  onclick="fsAction('copy')">📋 Copy</button>
+      <button class="btn-s" id="fs-save-btn"  onclick="fsAction('save')">💾 Save</button>
+      <button class="btn-s danger" onclick="closeEnlarge()" title="Close (Esc)">✕ Close</button>
+    </div>
+  </div>
+  <div class="fs-body" id="fs-body">
+    <!-- content injected by JS -->
+  </div>
+</div>
+
+<!-- ═══ ADVANCED REPEAT POPOVER ════════════════════════════ -->
+<!-- Shown near history row when user clicks Adv button -->
+<div id="adv-popover" class="adv-popover" style="display:none">
+  <div class="adv-title">Advanced Repeat</div>
+  <div class="adv-row">
+    <label>Repeat count</label>
+    <input type="number" id="adv-count" value="5" min="1" max="500" style="width:70px">
+  </div>
+  <div class="adv-row">
+    <label>Delay (ms)</label>
+    <input type="number" id="adv-delay" value="0" min="0" style="width:70px">
+  </div>
+  <div class="adv-progress-wrap" id="adv-pw" style="display:none">
+    <div class="adv-progress-bar" id="adv-pb"></div>
+    <div class="adv-progress-txt" id="adv-pt">0 / 0</div>
+  </div>
+  <div id="adv-results" class="adv-results"></div>
+  <div class="adv-btns">
+    <button class="btn-s" onclick="closeAdvPopover()">Close</button>
+    <button class="btn primary" id="adv-run-btn" onclick="runAdvRepeat()">▶ Run</button>
+  </div>
+</div>
+
+<div id="notifs"></div>
+<div id="modals"></div>
+
+<script src="app.js"></script>
+</body>
+</html>
